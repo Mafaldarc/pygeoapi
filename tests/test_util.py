@@ -31,6 +31,9 @@ from datetime import datetime, date, time
 from decimal import Decimal
 from contextlib import nullcontext as does_not_raise
 from copy import deepcopy
+from io import StringIO
+from unittest import mock
+import uuid
 
 import pytest
 from pyproj.exceptions import CRSError
@@ -77,6 +80,40 @@ def test_yaml_load(config):
             util.yaml_load(fh)
 
 
+@pytest.mark.parametrize('env,input_config,expected', [
+    pytest.param({}, 'foo: something', {'foo': 'something'}, id='no-env-expansion'),  # noqa E501
+    pytest.param({'FOO': 'this'}, 'foo: ${FOO}', {'foo': 'this'}),  # noqa E501
+    pytest.param({'FOO': 'this'}, 'foo: the value is ${FOO}', {'foo': 'the value is this'}, id='no-need-for-yaml-tag'),  # noqa E501
+    pytest.param({}, 'foo: ${FOO:-some default}', {'foo': 'some default'}),  # noqa E501
+    pytest.param({'FOO': 'this', 'BAR': 'that'}, 'composite: ${FOO}:${BAR}', {'composite': 'this:that'}),  # noqa E501
+    pytest.param({}, 'composite: ${FOO:-default-foo}:${BAR:-default-bar}', {'composite': 'default-foo:default-bar'}),  # noqa E501
+    pytest.param(
+        {
+            'HOST': 'fake-host',
+            'USER': 'fake',
+            'PASSWORD': 'fake-pass',
+            'DB': 'fake-db'
+        },
+        'connection: postgres://${USER}:${PASSWORD}@${HOST}:${PORT:-5432}/${DB}',  # noqa E501
+        {
+            'connection': 'postgres://fake:fake-pass@fake-host:5432/fake-db'
+        },
+        id='multiple-no-need-yaml-tag'
+    ),
+])
+def test_yaml_load_with_env_variables(
+        env: dict[str, str], input_config: str, expected):
+
+    def mock_get_env(env_var_name):
+        result = env.get(env_var_name)
+        return result
+
+    with mock.patch('pygeoapi.util.os') as mock_os:
+        mock_os.getenv.side_effect = mock_get_env
+        loaded_config = util.yaml_load(StringIO(input_config))
+        assert loaded_config == expected
+
+
 def test_str2bool():
     assert not util.str2bool(False)
     assert not util.str2bool('0')
@@ -106,6 +143,9 @@ def test_json_serial():
     d = Decimal(1.0)
     assert util.json_serial(d) == 1.0
 
+    d = uuid.UUID('12345678-1234-5678-1234-567812345678')
+    assert util.json_serial(d) == '12345678-1234-5678-1234-567812345678'
+
     with pytest.raises(TypeError):
         util.json_serial('foo')
 
@@ -132,7 +172,7 @@ def test_path_basename():
 def test_filter_dict_by_key_value(config):
     collections = util.filter_dict_by_key_value(config['resources'],
                                                 'type', 'collection')
-    assert len(collections) == 9
+    assert len(collections) == 10
 
     notfound = util.filter_dict_by_key_value(config['resources'],
                                              'type', 'foo')

@@ -32,24 +32,34 @@
 import base64
 from copy import deepcopy
 from filelock import FileLock
-import json
-import logging
-import mimetypes
-import os
-import re
 import functools
 from functools import partial
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
+import json
+import logging
+import mimetypes
+import os
 import pathlib
 from pathlib import Path
+import re
 from typing import Any, IO, Union, List, Optional, Callable
 from urllib.parse import urlparse
 from urllib.request import urlopen
+import uuid
 
 import dateutil.parser
+from babel.support import Translations
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2.exceptions import TemplateNotFound
+import pyproj
+import pygeofilter.ast
+import pygeofilter.values
+from pyproj.exceptions import CRSError
+from requests import Session
+from requests.structures import CaseInsensitiveDict
 from shapely import ops
 from shapely.geometry import (
     box,
@@ -65,14 +75,6 @@ from shapely.geometry import (
     mapping as geom_to_geojson,
 )
 import yaml
-from babel.support import Translations
-from jinja2 import Environment, FileSystemLoader, select_autoescape
-import pygeofilter.ast
-import pygeofilter.values
-import pyproj
-from pyproj.exceptions import CRSError
-from requests import Session
-from requests.structures import CaseInsensitiveDict
 
 from pygeoapi import __version__
 from pygeoapi import l10n
@@ -163,23 +165,39 @@ def yaml_load(fh: IO) -> dict:
     :returns: `dict` representation of YAML
     """
 
-    # support environment variables in config
-    # https://stackoverflow.com/a/55301129
-    path_matcher = re.compile(r'.*\$\{([^}^{]+)\}.*')
+    # # support environment variables in config
+    # # https://stackoverflow.com/a/55301129
 
-    def path_constructor(loader, node):
-        env_var = path_matcher.match(node.value).group(1)
-        if env_var not in os.environ:
-            msg = f'Undefined environment variable {env_var} in config'
-            raise EnvironmentError(msg)
-        return get_typed_value(os.path.expandvars(node.value))
+    env_matcher = re.compile(
+        r'.*?\$\{(?P<varname>\w+)(:-(?P<default>[^}]*))?\}')
+
+    def env_constructor(loader, node):
+        result = ""
+        current_index = 0
+        raw_value = node.value
+        for match_obj in env_matcher.finditer(raw_value):
+            groups = match_obj.groupdict()
+            varname_start = match_obj.span('varname')[0]
+            result += raw_value[current_index:(varname_start-2)]
+            if (var_value := os.getenv(groups['varname'])) is not None:
+                result += var_value
+            elif (default_value := groups.get('default')) is not None:
+                result += default_value
+            else:
+                raise EnvironmentError(
+                    f'Could not find the {groups["varname"]!r} environment '
+                    f'variable'
+                )
+            current_index = match_obj.end()
+        else:
+            result += raw_value[current_index:]
+        return get_typed_value(result)
 
     class EnvVarLoader(yaml.SafeLoader):
         pass
 
-    EnvVarLoader.add_implicit_resolver('!path', path_matcher, None)
-    EnvVarLoader.add_constructor('!path', path_constructor)
-
+    EnvVarLoader.add_implicit_resolver('!env', env_matcher, None)
+    EnvVarLoader.add_constructor('!env', env_constructor)
     return yaml.load(fh, Loader=EnvVarLoader)
 
 
@@ -384,6 +402,8 @@ def json_serial(obj: Any) -> str:
         return l10n.locale2str(obj)
     elif isinstance(obj, (pathlib.PurePath, Path)):
         return str(obj)
+    elif isinstance(obj, uuid.UUID):
+        return str(obj)
     else:
         msg = f'{obj} type {type(obj)} not serializable'
         LOGGER.error(msg)
@@ -454,7 +474,12 @@ def render_j2_template(config: dict, template: Path,
     translations = Translations.load(locale_dir, [locale_])
     env.install_gettext_translations(translations)
 
-    template = env.get_template(template)
+    try:
+        template = env.get_template(template)
+    except TemplateNotFound:
+        LOGGER.debug(f'template {template} not found')
+        template_paths.remove(templates)
+        template = env.get_template(template)
 
     return template.render(config=l10n.translate_struct(config, locale_, True),
                            data=data, locale=locale_, version=__version__)
@@ -578,6 +603,11 @@ class RequestedProcessExecutionMode(Enum):
     respond_async = 'respond-async'
 
 
+class RequestedResponse(Enum):
+    raw = 'raw'
+    document = 'document'
+
+
 class JobStatus(Enum):
     """
     Enum for the job status options specified in the WPS 2.0 specification
@@ -593,10 +623,12 @@ class JobStatus(Enum):
 
 @dataclass(frozen=True)
 class Subscriber:
-    """Store subscriber urls as defined in:
+    """
+    Store subscriber URLs as defined in:
 
     https://schemas.opengis.net/ogcapi/processes/part1/1.0/openapi/schemas/subscriber.yaml  # noqa
     """
+
     success_uri: str
     in_progress_uri: Optional[str]
     failed_uri: Optional[str]

@@ -33,7 +33,7 @@
 import os
 import pytest
 from pygeoapi.provider.base import ProviderInvalidQueryError
-from pygeoapi.provider.oracle import OracleProvider
+from pygeoapi.provider.oracle import OracleProvider, DatabaseConnection
 
 USERNAME = os.environ.get("PYGEOAPI_ORACLE_USER", "geo_test")
 PASSWORD = os.environ.get("PYGEOAPI_ORACLE_PASSWD", "geo_test")
@@ -62,8 +62,11 @@ class SqlManipulator:
         q,
         language,
         filterq,
+        extra_params
     ):
         sql = "ID = 10 AND :foo != :bar"
+        if extra_params.get("custom-auth") == "forbidden":
+            sql = f"{sql} AND 'auth' = 'you are not allowed'"
 
         if sql_query.find(" WHERE ") == -1:
             sql_query = sql_query.replace("#WHERE#", f" WHERE {sql}")
@@ -145,6 +148,20 @@ def config():
         "table": "lakes",
         "geom_field": "geometry",
         "editable": True,
+    }
+
+
+@pytest.fixture()
+def config_db_conn():
+    return {
+        "conn_dic": {
+            "host": HOST,
+            "port": PORT,
+            "service_name": SERVICE_NAME,
+            "user": USERNAME,
+            "password": PASSWORD,
+        },
+        "table": "lakes",
     }
 
 
@@ -616,3 +633,39 @@ def test_query_mandatory_properties_must_be_specified(config):
     p = OracleProvider(config)
     with pytest.raises(ProviderInvalidQueryError):
         p.query(properties=[("id", "123")])
+
+
+def test_extra_params_are_passed_to_sql_manipulator(config_manipulator):
+    extra_params = [("custom-auth", "forbidden")]
+
+    p = OracleProvider(config_manipulator)
+    response = p.query(properties=extra_params)
+
+    assert not response['features']
+
+
+@pytest.fixture()
+def database_connection_pool(config_db_conn):
+    os.environ["ORACLE_POOL_MIN"] = "2"  # noqa: F841
+    os.environ["ORACLE_POOL_MAX"] = "10"  # noqa: F841
+    yield
+    if 'ORACLE_POOL_MIN' in os.environ:
+        del os.environ["ORACLE_POOL_MIN"]
+    if 'ORACLE_POOL_MAX' in os.environ:
+        del os.environ["ORACLE_POOL_MAX"]
+
+
+def test_oracle_pool(config_db_conn, database_connection_pool):
+    """
+    Test whether an oracle session pool is created when there are
+    the required env variables.
+    """
+    db_conn = DatabaseConnection(**config_db_conn)
+    assert db_conn.pool
+    assert db_conn.pool.max == int(os.environ.get("ORACLE_POOL_MAX"))
+
+
+def test_query_pool(config, database_connection_pool):
+    """Test query using a DB Session Pool for a valid JSON object with geometry"""   # noqa
+    # Run query test again with session pool
+    test_query(config)

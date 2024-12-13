@@ -30,7 +30,7 @@
 #
 # =================================================================
 
-__version__ = '0.17.dev0'
+__version__ = '0.19.dev0'
 
 import click
 try:
@@ -97,11 +97,9 @@ def serve(ctx, server):
 
     if server == "flask":
         from pygeoapi.flask_app import serve as serve_flask
-        ctx.forward(serve_flask)
         ctx.invoke(serve_flask)
     elif server == "starlette":
         from pygeoapi.starlette_app import serve as serve_starlette
-        ctx.forward(serve_starlette)
         ctx.invoke(serve_starlette)
     elif server == "django":
         from pygeoapi.django_app import main as serve_django

@@ -81,14 +81,14 @@ class XarrayEDRProvider(BaseEDRProvider, XarrayProvider):
         wkt = kwargs.get('wkt')
         if wkt is not None:
             LOGGER.debug('Processing WKT')
-            LOGGER.debug(f'Geometry type: {wkt.type}')
-            if wkt.type == 'Point':
+            LOGGER.debug(f'Geometry type: {wkt.geom_type}')
+            if wkt.geom_type == 'Point':
                 query_params[self._coverage_properties['x_axis_label']] = wkt.x
                 query_params[self._coverage_properties['y_axis_label']] = wkt.y
-            elif wkt.type == 'LineString':
+            elif wkt.geom_type == 'LineString':
                 query_params[self._coverage_properties['x_axis_label']] = wkt.xy[0]  # noqa
                 query_params[self._coverage_properties['y_axis_label']] = wkt.xy[1]  # noqa
-            elif wkt.type == 'Polygon':
+            elif wkt.geom_type == 'Polygon':
                 query_params[self._coverage_properties['x_axis_label']] = slice(wkt.bounds[0], wkt.bounds[2])  # noqa
                 query_params[self._coverage_properties['y_axis_label']] = slice(wkt.bounds[1], wkt.bounds[3])  # noqa
                 pass
@@ -109,7 +109,7 @@ class XarrayEDRProvider(BaseEDRProvider, XarrayProvider):
 
         try:
             if select_properties:
-                self.fields = {k: v for k, v in self.fields.items() if k in select_properties}  # noqa
+                self._fields = {k: v for k, v in self._fields.items() if k in select_properties}  # noqa
                 data = self._data[[*select_properties]]
             else:
                 data = self._data
@@ -138,11 +138,11 @@ class XarrayEDRProvider(BaseEDRProvider, XarrayProvider):
             raise ProviderNoDataError()
 
         try:
-            height = data.dims[self.y_field]
+            height = data.sizes[self.y_field]
         except KeyError:
             height = 1
         try:
-            width = data.dims[self.x_field]
+            width = data.sizes[self.x_field]
         except KeyError:
             width = 1
         time, time_steps = self._parse_time_metadata(data, kwargs)
@@ -206,7 +206,7 @@ class XarrayEDRProvider(BaseEDRProvider, XarrayProvider):
         LOGGER.debug(f'query parameters: {query_params}')
         try:
             if select_properties:
-                self.fields = {k: v for k, v in self.fields.items() if k in select_properties}  # noqa
+                self._fields = {k: v for k, v in self._fields.items() if k in select_properties}  # noqa
                 data = self._data[[*select_properties]]
             else:
                 data = self._data
@@ -215,8 +215,8 @@ class XarrayEDRProvider(BaseEDRProvider, XarrayProvider):
         except KeyError:
             raise ProviderNoDataError()
 
-        height = data.dims[self.y_field]
-        width = data.dims[self.x_field]
+        height = data.sizes[self.y_field]
+        width = data.sizes[self.x_field]
         time, time_steps = self._parse_time_metadata(data, kwargs)
 
         out_meta = {

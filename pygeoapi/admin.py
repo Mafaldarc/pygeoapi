@@ -128,15 +128,15 @@ class Admin(API):
 
         # Preserve env variables
         LOGGER.debug('Reading env variables in configuration')
-        raw_conf = get_config(raw=True)
-        conf = get_config()
+        raw_conf = json.loads(to_json(get_config(raw=True)))
+        conf = json.loads(to_json(get_config()))
         patch = make_patch(conf, raw_conf)
 
         LOGGER.debug('Merging env variables')
         config = patch.apply(config)
 
         # write pygeoapi configuration
-        LOGGER.debug('Writing pygeoapi configutation')
+        LOGGER.debug('Writing pygeoapi configuration')
         yaml_dump(config, self.PYGEOAPI_CONFIG)
         LOGGER.debug('Finished writing pygeoapi configuration')
 

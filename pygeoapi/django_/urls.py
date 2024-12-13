@@ -147,8 +147,8 @@ urlpatterns = [
         name='collection-tiles-metadata',
     ),
     path(
-        'collections/<str:collection_id>/tiles/\
-        <str:tileMatrixSetId>/<str:tile_matrix>/<str:tileRow>/<str:tileCol>',
+        'collections/<str:collection_id>/tiles/' +
+        '<str:tileMatrixSetId>/<str:tileMatrix>/<str:tileRow>/<str:tileCol>',
         views.collection_item_tiles,
         name='collection-item-tiles',
     ),
@@ -234,6 +234,8 @@ urlpatterns = [
     ),
     path(apply_slash_rule('processes/'), views.processes, name='processes'),
     path('processes/<str:process_id>', views.processes, name='process-detail'),
+    path('processes/<str:process_id>/execution', views.process_execution,
+         name='process-execution'),
     path(apply_slash_rule('jobs/'), views.jobs, name='jobs'),
     path('jobs/<str:job_id>', views.jobs, name='job'),
     path(

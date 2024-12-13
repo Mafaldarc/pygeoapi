@@ -15,13 +15,13 @@ Providers
 pygeoapi core tile providers are listed below, along with supported features.
 
 .. csv-table::
-   :header: Provider, rendered on-the-fly, properties, WebMercatorQuad, WorldCRS84Quad
+   :header: Provider, rendered on-the-fly, properties, WebMercatorQuad, WorldCRS84Quad, raster, vector
    :align: left
 
-   `MVT-tippecanoe`_,❌,✅,✅,❌
-   `MVT-elastic`_,✅,❌,✅,❌
-   `MVT-proxy`_,❓,❓,❓,❓
-   `WMTSFacade`_,✅,❌,✅,✅
+   `MVT-tippecanoe`_,❌,✅,✅,❌,❌,✅
+   `MVT-elastic`_,✅,✅,✅,❌,❌,✅
+   `MVT-proxy`_,❓,❓,❓,❓,❌,✅
+   `WMTSFacade`_,✅,❌,✅,✅,✅,❌
 
 Below are specific connection examples based on supported providers.
 
@@ -106,8 +106,8 @@ Following block shows how to configure pygeoapi to read Mapbox vector tiles from
               zoom:
                 min: 0
                 max: 15
-             schemes:
-                 - WebMercatorQuad # this option is needed in the MVT-proxy provider
+              schemes:
+                - WebMercatorQuad # this option is needed in the MVT-proxy provider
          format:
              name: pbf
              mimetype: application/vnd.mapbox-vector-tile
@@ -120,12 +120,12 @@ Following code block shows how to configure pygeoapi to read Mapbox vector tiles
        - type: tile
          name: MVT-proxy
          data: http://localhost:3000/ne_50m_admin_0_countries/{z}/{x}/{y}
-            options:
-              zoom:
-                min: 0
-                max: 15
+         options:
+             zoom:
+                 min: 0
+                 max: 15
              schemes:
-                 - WebMercatorQuad
+                - WebMercatorQuad
          format:
              name: pbf
              mimetype: application/vnd.mapbox-vector-tile
@@ -162,18 +162,28 @@ Data access examples
 --------------------
 
 * list all collections
+
   * http://localhost:5000/collections
+  
 * overview of dataset
+
   * http://localhost:5000/collections/foo
+  
 * overview of dataset tiles
+
   * http://localhost:5000/collections/foo/tiles
+  
 * tile matrix metadata
+
   * http://localhost:5000/collections/lakes/tiles/WorldCRS84Quad/metadata
+  
 * tiles URI template
+
   * `http://localhost:5000/collections/lakes/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}?f=mvt <http://localhost:5000/collections/lakes/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}?f=mvt>`_
+  
 
 
-.. _`OGC API - Tiles`: https://github.com/opengeospatial/ogcapi-tiles
+.. _`OGC API - Tiles`: https://ogcapi.ogc.org/tiles
 .. _`tippecanoe`: https://github.com/mapbox/tippecanoe
 .. _`Elasticsearch`: https://www.elastic.co/
 .. _`Mapbox Vector Tiles`: https://docs.mapbox.com/data/tilesets/guides/vector-tiles-introduction/
